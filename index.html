@@ -1,32 +1,301 @@
 <html>
-	<head>
-		<link rel="stylesheet" href="stylehome.css">
-	</head>
-	<body>
-		<h1>CS184 Project Directory</h1>
-		<h3 style="text-align: center">Spring 2023</h3>
-		<h3 style="text-align: center">By Alana Li</h3>
-		<h2>
-			<br><br>
-			<a href="/proj1/index.html">Project 1: Rasterizer</a>
-			<br><br>
-			<a href="/proj2/index.html">Project 2: MeshEdit</a>
-			<br><br>
-			<a href="/proj3-1/index.html">Project 3-1</a>
-			<br><br>
-			<a href="/proj3-2/index.html">Project 3-2</a>
-			<br><br>
-			<a href="/proj4/index.html">Project 4</a>
-		</h2>
-	</body>
-	<script>
-		var links = document.body.getElementsByTagName("a")
-		var a = window.location.href.indexOf(".io")
-		var repo_name = window.location.href.substring(a+3)
-		for(var i = 0; i < links.length; i++){
-			var link = links[i]
-			var actual_name = link.href.substring(link.href.indexOf(".io")+4)
-			link.href = repo_name + actual_name
-		}
-	</script>
+<head>
+<script src='https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/MathJax.js?config=default'></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+	h1 {
+		text-align: center;
+	}
+
+	.container {
+		margin: 0 auto;
+		padding: 60px 20%;
+	}
+
+	figure {
+		text-align: center;
+	}
+
+	img {
+		display: inline-block;
+	}
+
+	body {
+		font-family: 'Inter', sans-serif;
+	}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>CS184/284A Spring 2025 Homework 1 Write-Up</h1>
+<div style="text-align: center;">Names: Jeremy Fischer and Allison Dana</div>
+<div style="text-align: center;"><a href="#section1">Task 1</a> - <a href="#section2">Task 2</a> - <a href="#section3">Task 3</a> - <a href="#section4">Task 4</a> - <a href="#section5">Task 5</a> - <a href="#section6">Task 6</a></div>
+
+<br>
+
+Link to webpage: <a href="https://cal-cs184-student.github.io/hw-webpages-jeremy-and-allison/hw1/index.html">https://cal-cs184-student.github.io/hw-webpages-jeremy-and-allison/hw1/index.html</a>
+
+<br>
+
+Link to GitHub repository:<a href="https://github.com/cal-cs184-student/sp25-hw1-jeremy-allison">https://github.com/cal-cs184-student/sp25-hw1-jeremy-allison</a>
+
+<figure>
+	<img src="P6 L_Nearest P_Linear.png" alt="Lion" style="width:50%"/>
+</figure>
+
+<h2>Overview</h2>
+In this assignment, we tackle the problem of rasterization; the process of drawing objects to the screen and combatting aliasing with a variety of methods. We start with the basics, like what it means mathematically to be inside a triangle, before moving on to more complex topics. However not all methods are created equal, we explore the effectiveness of supersampling, bounding boxes, incremental traversal, interpolation, bilinear, trilinear, and other methods while weighing their time and memory complexity. We've learned that overcoming aliasing often comes at a cost, such as using supersampling, but you can be smarter by using methods like bilinear or trilinear filtering to often achieve better visual results with lower time complexity.
+
+<h2 id="section1">Task 1: Drawing Single-Color Triangles</h2>
+<h3>What Does it Mean Mathematically to be in a Triangle?</h3>
+To begin with rasterization, the most important question to know whether a pixel should be colored or not is if a point is inside or outside a triangle. To do this, take the cross-product between each vertex A to B, B to C, and C to A and observe the signage.
+<br><br>
+<code> 
+float AB = (p.x - A.x)*(B.y-A.y)-(p.y-A.y)*(B.x-A.x);<br>
+float BC = (p.x - B.x)*(C.y-B.y)-(p.y-B.y)*(C.x-B.x);<br>
+float CA = (p.x - C.x)*(A.y-C.y)-(p.y-C.y)*(A.x-C.x);<br>
+</code>
+<br>
+If the triangle is counterclockwise and all cross-products are >= 0 then the point is within, if clockwise and all cross-products are <=0 then the point is within. 
+<br><br>
+But what makes makes a triangle "clockwise" or "counterclockwise"? It's not something you can easily visually see, it's determined by the order in which the vertices are listed. If the vertices are listed 1st to 2nd to 3rd then the triangle is clockwise else counter-clockwise. To do this in code you can find the signed area of the triangle using this formula:
+<br><br>
+<code>float signedArea = ((B.x - A.x) * (C.y - A.y) - (B.y - A.y) * (C.x - A.x))</code>
+<br><br>
+If this area is positive it's counterclockwise, if negative it's clockwise. However, we aren't using standard coordinates where (0,0) is the bottom left, instead we use the convention that (0,0) is the top left! Meaning we need to reverse this logic, if the area is positive it is clockwise, and if negative counterclockwise.
+<br><br>
+To check an actual pixel (at sampling rate 1), an offset is needed to check the center of the pixel by adding 1/2 to the x and y. For example, if you were checking pixel (10, 10) you would check if (10.5, 10.5) was inside the triangle.
+<h3>Looping Strategies</h3>
+Now that a point can be determined in or out of a triangle, a looping algorithm is needed to efficiently check pixels.
+<h4>Naive</h4>
+A straightforward approach is to check every single pixel in the image by using a double for loop. It produces the correct result but is horribly slow.
+<br>
+<figure>
+	<img src="P1 Pic1.png"  style="width:50%"/>
+	<figcaption>(Example of aliasing, the pink triangle has a gap. This will be addressed in task 2.)</figcaption>
+</figure>
+<h4>Bounding Box</h4>
+A smarter approach is to notice a box could be drawn around the triangle's vertices, shrinking the area of pixels that need to be checked. The algorithm is straightforward too, find the min_x, min_y, max_x, max_y of the vertices and clamp them to the screen width and length. Then double loop over these min and max, resulting in tremendous speedup and the default method moving forward.
+<h4>Incremental Triangle Traversal (Top Down) - <b>Extra Credit</b></h4>
+A different approach is to start at one of the vertices and line by line fill in the triangle, ignoring much of the wasteful checks outside the triangle in the bounding box. This can be a few different ways; left-to-right/right-to-left filling in columns or top-to-bottom/bottom-to-top filling in rows. Top-to-bottom was arbitrarily chosen and implemented.
+<br><br>
+To implement, the topmost vertice is used to begin at, going horizontally line by line until the bottom vertice is reached. To figure out where the horizontal line begins and ends the slopes of each edge are calculated before the looping begins. The current y level can be multiplied by the slope and added to the vertex's x to get the left/right (starting/end) points. Then loop through this horizontal line, filling the sample_buffer with the triangle color.
+<br><br>
+To check the speed difference, <code>DrawRend::redraw()</code> was modified to include a high-resolution clock that starts before and ends after the <code>svg.draw()</code> call. Specific speed-up is hardware dependent, but on Jeremy's laptop rasterizing basic_image_5 using the bounding box (~2500 microseconds) vs. incremential triangle traversal (~200 microseconds) saw a 10x difference! This might seem unintuitive at first; why a 10x speedup when surely you are not checking x10 fewer pixels? Although fewer pixels are looped over, there is no longer a need to check if the point are in the triangle saving many multiplications!
+<br><br>
+<i>Note: To enable incremental traversal in our code, press the <code>'I'</code> key.</i>
+			
+<h2 id="section2">Task 2: Antialiasing by Supersampling</h2>
+
+A single sample can cause aliasing problems as seen in task 1 with a noticeable gap in the pink triangle. Additionally, nasty jaggies can be seen on the edges of triangles which need to be smoothed out. To solve this a technique of supersampling can be employed.
+
+<h3>Supersampling Algorithm</h3>
+Before sampling was done in the middle of the pixel, but with a higher number of samples, a grid structure is used. For each pixel sampled, two for loops iterate over the grid checking if the sample is within the triangle, if so (and with the proper index offset) the sample_buffer is set with the color. Samples not in the triangle are left as the default white color. Later when the colors are averaged, if all samples were in the triangle the color of the pixel would simply be the color, however, if not all the samples were in the triangle a nice average faded color would be assigned to the pixel.
+
+<h3>Modification to Pipeline</h3>
+With additional samplings, the sample_buffer needed to be resized to accompany the new data. In the setters <code>RasterizerImp::set_sample_rate</code> and <code>RasterizerImp::set_framebuffer_target</code> resize was changed to multiply by sample_rate, as each pixel now has 'sample_rate' number more data.
+<br><br>
+The <code>RasterizerImp::resolve_to_framebuffer</code> was modified as now there is 'sample_rate' number of samples to accumulate into one pixel. To accumulate, simply average the RGB between all the samples and insert the final color into the frame buffer. 
+<br><br>
+A slight change to <code>RasterizerImp::fill_pixel</code> was needed. Before, the code simply inserted the color into the sample_buffer, but this didn't account for the sample_rate size increase. To fix this, insert 'sample_rate' number of color data into the sample_buffer.
+
+<h3>Result and Utility</h3>
+Using supersampling can clearly fix both jaggies, alias gaps, and other aliasing problems as seen in the image grid of various supersampling below:
+<br><br>
+<div style="display: flex; flex-direction: column; align-items: center;">
+	<table style="width: 100%; text-align: center; border-collapse: collapse;">
+		<tr>
+		<td style="text-align: center;">
+			<img src="P2 Sample 1.png" width="400px"/>
+			<figcaption>Supersampling 1</figcaption>
+		</td>
+		<td style="text-align: center;">
+			<img src="P2 Sample 4.png" width="400px"/>
+			<figcaption>Supersampling 4</figcaption>
+		</td>
+		</tr>
+		<tr>
+		<td style="text-align: center;">
+			<img src="P2 Sample 9.png" width="400px"/>
+			<figcaption>Supersampling 9</figcaption>
+		</td>
+		<td style="text-align: center;">
+			<img src="P2 Sample 16.png" width="400px"/>
+			<figcaption>Supersampling 16</figcaption>
+		</td>
+		</tr>
+	</table>
+</div>
+<br>
+The gap problem is solved as more of the pixels are uniformly spaced reducing the chance of a pixel being completely missed during sampling. Jaggies are solved as the nice fade helps reduce the sudden drop-off in color. The results are great but the additional sampling can take a toll on computation!
+	
+<h3>Extra Credit - Hammersley's 2D Low Discrepancy Sampling</h3>
+The idea of low discrepancy sampling is to have a better pattern of sampling than a ridged grid. Take a 4x4 grid for example, you could imagine missed sampling if a line or thin triangle went between the grid or was directly left/right of the grid. Hemmersley's method was implemented, <a href="https://www.shadertoy.com/view/4lscWj">sourced here</a>, which produced a 2D vector to be added to the pixel's center to get the sampling location. This process was repeated in a loop 'sample_rate' number of times.
+<br><br>
+An example of where low discrepancy beat out grid sampling was at sampling rate 4 of the pink triangle. With a more uniform sampling the Hammersley succesfully had no gaps in the triangle whereas the grid pattern still struggled. At higher sampling rates there is not much of a difference, but to get better quality sampling at a lower rate saves an order of magnitude of computation!
+<br>
+<div style="display: flex; flex-direction: column; align-items: center;">
+	<table style="width: 100%; text-align: center; border-collapse: collapse;">
+		<tr>
+		<td style="text-align: center;">
+			<img src="P2 Extra Credit Grid SS4.png" width="400px"/>
+			<figcaption>Grid Supersampling 4</figcaption>
+		</td>
+		<td style="text-align: center;">
+			<img src="P2 Extra Credit LowD SS4.png" width="400px"/>
+			<figcaption>Low Discrepancy (Hammersley 2D) Sample Rate 4</figcaption>
+		</td>
+		</tr>
+	</table>
+</div>
+<br>
+<h2 id="section3">Task 3: Transforms</h2>
+For our custom robot, we turned their head back and rotated/translated their arms into a waving position!
+<br>
+<figure>
+	<img src="P3 Custom Robot.png"  style="width:50%"/>
+</figure>
+<br>
+
+<h3>Extra Credit</h3>
+The extra GUI feature added was the ability to move the robot using the arrow keys seen below. To accomplish this <code>DrawRend::redraw()</code> was modified, specifically the <code>svg.draw</code> call. The second parameter was a homogeneous matrix multiply between <code>ndc_to_screen</code> and <code>svg_to_ndc</code>. A translation matrix, using the <code>translate</code> function, was interjected between the multiplication with the params of <code>translate_x</code> and <code>translate_y</code>. These translate members variables were initialized to 0 to have no initial effect but when the arrow keys are pressed they would be nudged by a <code>speed</code> factor. This factor was very small like 0.01 because normalized device coordinates (NDC) ranges from [-1, 1].
+<br>
+<figure>
+	<img src="P3 Extra Credit.gif"  style="width:50%"/>
+	<figcaption>Gif of moving robot.</figcaption>
+</figure>
+<br>
+
+
+<h2 id="section4">Task 4: Barycentric coordinates</h2>
+Barycentric coordinates are a way to describe the location of a point in a triangle in relation to the 3 vertices and their edges. A point is described with an alpha, beta, and gamma corresponding to the A, B, and C vertices. From a geometric point of view, the parameters are the proportional distance (1-'parameter') away from the vertex and a 'parameter' length away from the vertex's opposite edge. These distances summed together are 1, thus making the coordinates normalized. If the vertices represent a color or texture, the Barycentric coordinates can linearly interpolate the values across the triangle creating a smooth effect seen below:
+<br>
+<figure>
+	<img src="P4 Pic2.png"  style="width:50%"/>
+	<figcaption>Display this trianlge in code using the <code>'J'</code> key. Notice the top left vertex is red and as the distance away from vertex gets greater, the less the vertex's influence on the resulting color is.</figcaption>
+</figure>
+<br>
+The rasterization of the color wheel can be seen below:
+<br>
+<figure>
+	<img src="P4 Pic1.png"  style="width:50%"/>
+</figure>
+<br>
+<h3>For the Mathematically Inclined or Implementation Interested</h3>
+Given a point in the triangle (x,y) we need to know these "distance" or "weight" parameters alpha, beta, and gamma which is given by the formulas in class:
+<br>
+<figure>
+	<img src="P4 Pic3.png"  style="width:50%"/>
+</figure>
+<br>
+In the implementation, the denominator is calculated outside the rasterization loop as it has no dependence on the sampling point 'p'. The final color data written to the sample buffer is each of the 3 vertex colors weighted by their corresponding parameter summed together.
+<br><br>
+<code>sample_buffer[pixel_offset + subsample_offset] = c0 * alpha + c1 * beta + c2 * gamma;</code>
+<br>
+
+<h2 id="section5">Task 5: "Pixel sampling" for texture mapping</h2>
+<h3>Nearest vs Bilinear Pixel Filtering</h3>
+Nearest, as the naming implies, simply returns the color from the nearest texel of the texture map. Bilinear however is influenced by the 4 nearest texels weighted by their distance. The top 2 texels are lerped along with the bottom 2. The resulting values are then lerped for the final resulting color that is much more smooth.
+<br>
+<figure>
+	<img src="P5 Bilinear Pic.png"  style="width:50%"/>
+	<figcaption>Lecture 5 - Bilinear Filtering Visual Aid</figcaption>
+</figure>
+<br>
+<div style="display: flex; flex-direction: column; align-items: center;">
+	<table style="width: 100%; text-align: center; border-collapse: collapse;">
+		<tr>
+		<td style="text-align: center;">
+			<img src="P5 Nearest SS1.png" width="400px"/>
+			<figcaption>Nearest Supersampling 1</figcaption>
+		</td>
+		<td style="text-align: center;">
+			<img src="P5 Nearest SS16.png" width="400px"/>
+			<figcaption>Nearest Supersampling 16</figcaption>
+		</td>
+		</tr>
+		<tr>
+		<td style="text-align: center;">
+			<img src="P5 Bilinear SS1.png" width="400px"/>
+			<figcaption>Bilinear Supersampling 1</figcaption>
+		</td>
+		<td style="text-align: center;">
+			<img src="P5 Bilinear SS16.png" width="400px"/>
+			<figcaption>Bilinear Supersampling 16</figcaption>
+		</td>
+		</tr>
+	</table>
+</div>
+<br>
+
+The example above demonstrates the effect of bilinear vs nearest with sample rates of 1 and 16. At rate 1, there is already a noticeable effect with very jagged lines in the nearest, but nice smooth lines in the bilinear. The effect is much less noticeable in the supersampling 16 but if you zoom in you can see that the faded region of nearest is a little bit jaggy whereas the bilinear has consistent horizontal lines of different shading. With how expensive supersampling is, bilinear offers a more cost-effective way to prevent aliasing effects like jaggies when dealing with textures. There will be a large difference between the two filtering methods when there are fine lines or sudden changes in textures.
+
+<h2 id="section6">Task 6: "Level Sampling" with mipmaps for texture mapping</h2>
+The simplest level sampling is option 'Zero' where you simply use the zeroth layer of the mipmap, the highest quality. The next option 'Nearest' was implemented based on the formula belowm, which is dependent on camera zoom. The farther away the camera is, the larger the derivative is.
+<br>
+<figure>
+	<img src="P6 Map Level Formula.png"  style="width:50%"/>
+	<figcaption>Lecture 5 - Level Map Formula</figcaption>
+</figure>
+<br>
+Having high-quality textures viewed from far away can create aliasing as sharp details are squished in a finite space. By creating multiple levels of texture qualities, a more blurred texture can be more appropriate when viewed from far away. However close-up inspections should still use the highest quality texture.
+<br><br>
+The final option 'linear' takes the nearest sampling to the next level, interpolating between the the level above and below the texel. A fractional weight is applied to the low and high and color is accumulated and averaged. This provides a more natural blending of quality than a sudden drop-off.
+<br>
+<h3>Memory, Speed, and Antialiasing Power</h3>
+-<b>Zero</b>: It's as if there is no level sampling so it's the fastest, requires no additional memory, but has no antialiasing power when viewed from a distance.
+<br>
+-<b>Nearest</b>: There requires more memory as multiple levels of resolutions need to be generated. The formula to find texture level requires a square root, a notoriously slow operation to perform every sampling. However, there are sizable gains in antialiasing powers, especially when the view distance is far away.
+<br>
+-<b>Linear</b>: There requires additional memory like nearest. It requires more computation than nearest as it needs to sample the texture twice. However, it provides the most power antialiasing providing a smooth transition between texture mappings.
+<br>
+
+<h2>Comparing L_ZERO, L_NEAREST, P_NEAREST, P_LINEAR</h2>
+<br>
+<div style="display: flex; flex-direction: column; align-items: center;">
+	<table style="width: 100%; text-align: center; border-collapse: collapse;">
+		<tr>
+		<td style="text-align: center;">
+			<img src="P6 L_Zero P_Nearest.png" width="400px"/>
+			<figcaption>L_ZERO - P_NEAREST</figcaption>
+		</td>
+		<td style="text-align: center;">
+			<img src="P6 L_Zero P_Linear.png" width="400px"/>
+			<figcaption>L_ZERO - P_LINEAR</figcaption>
+		</td>
+		</tr>
+		<tr>
+		<td style="text-align: center;">
+			<img src="P6 L_Nearest P_Nearest.png" width="400px"/>
+			<figcaption>L_NEAREST - P_NEAREST</figcaption>
+		</td>
+		<td style="text-align: center;">
+			<img src="P6 L_Nearest P_Linear.png" width="400px"/>
+			<figcaption>L_NEAREST - P_LINEAR</figcaption>
+		</td>
+		</tr>
+	</table>
+</div>
+<br><br>
+Above shows off different options of level and pixel sampling. Notice in L_ZERO, P_NEAREST there are some rough textures on the squirrel's fur from trying to squeeze a lot of details like fur highlights in a small area. The grass near the front that is zoomed into is very jaggy.
+<br><br>
+This is improved slightly when moving to L_ZERO, P_LINEAR with the pixel sampling linearly interpolated. This reduces the harsh transitions by blending texel values but still is suffering from high-frequency aliasing.
+<br><br>
+However, the biggest improvement is switching to L_NEAREST where a smaller mipmap is sampled from. The squirrel's fur no longer has jagged highlights but the zoomed-in grass blade still is a little jagged, although smoothed out a bit.
+<br><br>
+That is fixed when moving to L_NEAREST, P_NEAREST where the squirrel's fur continues to be smoothed but the grass blade is no longer jaggy by lerping nearby texels.
+<br><br>
+<h2>References</h2>
+
+http://holger.dammertz.org/stuff/notes_HammersleyOnHemisphere.html (No longer up for some reason. See simular source for hemmersley below)
+https://www.shadertoy.com/view/4lscWj
+
+<h2>Use of AI</h2>
+Team member Jeremy used ChatGPT o3-mini-high to quiz his knowledge on HW1 topics, learn new C++ syntax, debugging, and get coding ideas to implement like for the extra credit 2 Hemmersley's method. He did not use it for any report writing.
+
+<h3>What Did You Learn? (Jeremy)</h3>
+GPT is great at summarizing ideas and ensuring you understand the HW concepts clearly. For example, I would explain what bilinear is in my own words and ask GPT if I had any misconceptions. At various times I'd get stuck with some C++ debugging and GPT is able to read the error log and give some ideas as to what might be wrong. I've found it can explain syntax better and faster than the docs, for example, I didn't know what the keyword auto& was doing with the mipmap.
+
+</div>
+</body>
 </html>
