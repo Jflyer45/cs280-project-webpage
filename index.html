@@ -277,7 +277,7 @@
 	<p>DUSt3R is a neural network approach for 3D reconstruction that creates consistent three-dimensional models from collections of uncalibrated images without known camera positions. It works by generating dense pointmaps, which map pixels to 3D coordinates. The system uses a transformer architecture with a shared encoder and cross-attention decoders to process image pairs and produce pointmaps in a common reference frame. From these pointmaps, the system can determine camera parameters, pixel correspondences, depth information, and camera poses.</p>
 	
 	<h4>4.5.1 DUSt3R + View Selection</h4>
-	<p>DUSt3R suffers from a combinatorial explosion in training time as additional images are included due to its cross-referencing mechanism. Although DUSt3R learns extrinsics and cannot be directly inserted, we hypothesized that we could achieve better quality output by using our position extractions and a greedy algorithm to find the optimal view distribution. Additionally, this would solve the infeasibility of training on the entire image group.</p>
+	<p>DUSt3R suffers from a combinatorial explosion in training time as additional images are included due to its cross-referencing mechanism. Although DUSt3R learns extrinsics and cannot be directly inserted, we hypothesized that we could achieve better quality output by using our position extractions and a greedy algorithm to find the optimal views. Additionally, this would solve the infeasibility of training on the entire image group.</p>
 	
 	<table class="comparison-table">
 		<tr>
@@ -312,25 +312,21 @@
 	<div class="figure-container">
 		<div class="figure-item">
 			<img src="Duster least spread k=5 overview.png" alt="DUSt3R least spread visualization"/>
-			<div class="caption">Figure 7: DUSt3R with least optimal camera spread (k=5)</div>
 		</div>
 		<div class="figure-item">
 			<img src="Duster best spread k=5 overview.png" alt="DUSt3R most spread visualization"/>
-			<div class="caption">Figure 8: DUSt3R with most optimal camera spread (k=5)</div>
 		</div>
+		Figure 7. Most spread (right) recovered more area, has less gaps, and more defined edges in building geometry than least spread (left).
 	</div>
-	
-	<p>Most spread configuration (right) recovered more area, has fewer gaps, and more defined edges in building geometry than least spread configuration (left).</p>
 	
 	<div class="figure-container">
 		<div class="figure-item">
 			<img src="least spread.png" alt="Gap visualization in least spread"/>
-			<div class="caption">Figure 9: Gap and poor geometry visualization with least-spread camera configuration</div>
 		</div>
 		<div class="figure-item">
 			<img src="Most Spread.png" alt="Improved geometry in most spread"/>
-			<div class="caption">Figure 10: Improved geometry with most-spread camera configuration</div>
 		</div>
+		Figure 8. Gap and poor geometry visualization for the least-spread (left) and it mostly fixed in most-spread (right).
 	</div>
 	
 	<div class="result-highlight">
